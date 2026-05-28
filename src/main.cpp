@@ -1,3 +1,4 @@
+#include "entt/entity/entity.hpp"
 #include <array>
 #include <entt/entt.hpp>
 #include <raylib.h>
@@ -30,7 +31,9 @@ struct Renderable {
 
 struct ShipStats {
   int lives = 3;
-  float speed = 100.0f;
+  float speed = 200.0f;
+  float cool_rem = 0.0f;
+  float cool_max = 20.0f;
 };
 
 struct Position {
@@ -39,6 +42,10 @@ struct Position {
 
 struct Box {
   int w, h;
+};
+
+struct Bullet {
+  enum class From { Ship, Invader };
 };
 
 class Spawner {
@@ -58,6 +65,8 @@ public:
     reg.emplace<Position>(e, ship_x, ship_y);
     reg.emplace<Box>(e, SHIP_W, SHIP_H);
   }
+
+  void SpawnBullet(int x, int y, Bullet::From from) {}
 };
 
 using TextureArray = std::array<Texture, static_cast<int>(Sprites::Count)>;
@@ -86,6 +95,33 @@ TextureArray LoadAllTextures() {
   return texts;
 };
 
+void InputSystem(entt::registry &reg, float dt, Spawner &sp) {
+  auto view = reg.view<ShipTag, ShipStats, Position>();
+
+  auto entity = view.front();
+
+  if (entity == entt::null) return;
+
+  auto [s, p] = view.get<ShipTag, ShipStats, Position>(entity);
+
+  if (IsKeyDown(KEY_LEFT) && p.x > 10) {
+    p.x -= s.speed * dt;
+  }
+
+  if (IsKeyDown(KEY_RIGHT) && p.x < WINDOW_WIDTH - 10 - SHIP_W) {
+    p.x += s.speed * dt;
+  }
+
+  if (IsKeyPressed(KEY_SPACE) && s.cool_rem <= 0.0f) {
+    sp.SpawnBullet(p.x, p.y, Bullet::From::Ship);
+    s.cool_rem = s.cool_max;
+  }
+
+  if (s.cool_rem > 0.0f) {
+    s.cool_rem -= dt;
+  }
+}
+
 int main() {
 
   entt::registry registry;
@@ -102,6 +138,10 @@ int main() {
 
   while (!WindowShouldClose()) {
     // update
+
+    float dt = GetFrameTime();
+
+    InputSystem(registry, dt, spawner);
 
     // draw
     BeginDrawing();
