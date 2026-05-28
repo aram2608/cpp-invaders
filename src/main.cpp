@@ -2,6 +2,7 @@
 #include "entt/entity/fwd.hpp"
 #include <array>
 #include <entt/entt.hpp>
+#include <random>
 #include <raylib.h>
 
 constexpr float WINDOW_WIDTH = 800.0f;
@@ -11,7 +12,8 @@ constexpr int SHIP_H = 30;
 constexpr int SHIP_X = WINDOW_WIDTH / 2 - SHIP_W / 2;
 constexpr int SHIP_Y = WINDOW_HEIGHT - SHIP_H - 40;
 constexpr int BULLET_W = 10;
-constexpr int BULLET_H = 10;
+constexpr int BULLET_H = 20;
+constexpr float BULLET_SPEED = 200.0f;
 
 // InputSystem
 // InvaderMovementSystem
@@ -48,6 +50,7 @@ struct Box {
 
 struct Bullet {
   enum class From { Ship, Invader };
+  From from;
 };
 
 struct Invader {};
@@ -164,7 +167,7 @@ void InputSystem(entt::registry &reg, float dt, Spawner &sp) {
     s.cool_rem = s.cool_max;
   }
 
-  if (s.cool_rem > 0.0f) s.cool_rem -= dt;
+  if (s.cool_rem > 0.0f) s.cool_rem -= 100.0f * dt;
 }
 
 void InvaderMovementSystem(entt::registry &reg, int alien_w, float dt) {
@@ -190,6 +193,70 @@ void InvaderMovementSystem(entt::registry &reg, int alien_w, float dt) {
   fs.drop = false;
 }
 
+void BulletMovementSystem(entt::registry &reg, float dt) {
+  auto view = reg.view<Bullet, Position>();
+
+  for (auto [e, b, p] : view.each()) {
+    switch (b.from) {
+    case Bullet::From::Invader:
+      p.y += BULLET_SPEED * dt;
+      break;
+    case Bullet::From::Ship:
+      p.y -= BULLET_SPEED * dt;
+      break;
+    }
+  }
+}
+
+class RNG {
+  std::mt19937 engine_;
+
+public:
+  RNG() : engine_(std::random_device{}()) {}
+  int RandInt(int min, int max) {
+    std::uniform_int_distribution<> distr(min, max);
+    return distr(engine_);
+  }
+
+  float RandFloat(float min, float max) {
+    std::uniform_real_distribution<> distr(min, max);
+    return distr(engine_);
+  }
+};
+
+struct FleetFire {
+  float cool_rem = 1.0f;
+  float cool_min = 0.4f;
+  float cool_max = 1.2f;
+};
+
+void InvaderShootSystem(entt::registry &reg, Spawner &sp, float dt) {
+  static RNG rng;
+  auto &ff = reg.ctx().get<FleetFire>();
+  ff.cool_rem -= dt;
+  if (ff.cool_rem > 0.0f) return;
+
+  std::unordered_map<int, entt::entity> front;
+  std::unordered_map<int, Position> front_pos;
+
+  for (auto [e, p] : reg.view<Invader, Position>().each()) {
+    int col = static_cast<int>(p.x);
+    auto it = front_pos.find(col);
+    if (it == front_pos.end() || p.y > it->second.y) {
+      front[col] = e;
+      front_pos[col] = p;
+    }
+  }
+
+  if (!front.empty()) {
+    auto it = front.begin();
+    std::advance(it, rng.RandInt(0, front.size() - 1));
+    auto p = front_pos[it->first];
+    sp.SpawnBullet(p.x, p.y, Bullet::From::Invader);
+  }
+  ff.cool_rem = rng.RandFloat(ff.cool_min, ff.cool_max);
+}
+
 int main() {
   SetTraceLogLevel(LOG_ERROR);
   InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "space invaders");
@@ -202,6 +269,7 @@ int main() {
 
   entt::registry registry;
   registry.ctx().emplace<Fleet>();
+  registry.ctx().emplace<FleetFire>();
 
   entt::dispatcher dispatcher;
   Spawner spawner{registry, SHIP_X, SHIP_Y, ALIEN_W, ALIEN_H};
@@ -216,6 +284,8 @@ int main() {
 
     InputSystem(registry, dt, spawner);
     InvaderMovementSystem(registry, ALIEN_W, dt);
+    BulletMovementSystem(registry, dt);
+    InvaderShootSystem(registry, spawner, dt);
 
     // draw
     BeginDrawing();
