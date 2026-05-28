@@ -37,4 +37,4 @@ target_compile_definitions(space_invaders
       $<$<CONFIG:Debug>:DEBUG_BUILD>
 )
 
-target_link_libraries(space_invaders PRIVATE raylib)
+target_link_libraries(space_invaders PRIVATE raylib EnTT::EnTT)
