@@ -38,3 +38,10 @@ target_compile_definitions(space_invaders
 )
 
 target_link_libraries(space_invaders PRIVATE raylib EnTT::EnTT)
+
+add_custom_command(TARGET space_invaders POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/assets"
+        "$<TARGET_FILE_DIR:space_invaders>/assets"
+    COMMENT "Copying assets to output directory"
+)

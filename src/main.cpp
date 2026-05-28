@@ -1,4 +1,4 @@
-#include "entt/entity/fwd.hpp"
+#include <array>
 #include <entt/entt.hpp>
 #include <raylib.h>
 
@@ -19,12 +19,13 @@ constexpr int SHIP_Y = WINDOW_HEIGHT - SHIP_H - 40;
 // RenderSystem
 // CleanupSystem
 
+enum class Sprites { Ship, Alien, UFO, Count };
+
 struct ShipTag {};
 
 struct Renderable {
   // Placeholder for now will index into a sprite array
-  int sprite_id;
-  Color color;
+  Sprites sprite;
 };
 
 struct ShipStats {
@@ -52,21 +53,41 @@ public:
   void SpawnShip() {
     auto e = reg.create();
     reg.emplace<ShipTag>(e);
-    reg.emplace<Renderable>(e, 0, GREEN);
+    reg.emplace<Renderable>(e, Sprites::Ship);
     reg.emplace<ShipStats>(e);
     reg.emplace<Position>(e, ship_x, ship_y);
     reg.emplace<Box>(e, SHIP_W, SHIP_H);
   }
 };
 
-void RenderSystem(entt::registry &reg) {
+using TextureArray = std::array<Texture, static_cast<int>(Sprites::Count)>;
+
+void RenderSystem(entt::registry &reg, const TextureArray &texts) {
   auto view = reg.view<Position, Box, Renderable>();
   for (auto [e, pos, box, r] : view.each()) {
-    DrawRectangle(pos.x, pos.y, box.w, box.h, r.color);
+    DrawTexture(texts[static_cast<int>(r.sprite)], pos.x, pos.y, WHITE);
   }
 }
 
+TextureArray LoadAllTextures() {
+  Image ship_image = LoadImage("./assets/icons/ship.png");
+  Image alien_image = LoadImage("./assets/icons/alien.png");
+  Image ufo_image = LoadImage("./assets/icons/ufo.png");
+  TextureArray texts = {
+      LoadTextureFromImage(ship_image),
+      LoadTextureFromImage(alien_image),
+      LoadTextureFromImage(ufo_image),
+  };
+
+  UnloadImage(ship_image);
+  UnloadImage(alien_image);
+  UnloadImage(ufo_image);
+
+  return texts;
+};
+
 int main() {
+
   entt::registry registry;
   entt::dispatcher dispatcher;
   Spawner spawner{registry, SHIP_X, SHIP_Y};
@@ -77,6 +98,8 @@ int main() {
   InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "space invaders");
   SetTargetFPS(60);
 
+  TextureArray texts = LoadAllTextures();
+
   while (!WindowShouldClose()) {
     // update
 
@@ -84,13 +107,14 @@ int main() {
     BeginDrawing();
     ClearBackground({255, 255, 255, 255});
 
-    RenderSystem(registry);
+    RenderSystem(registry, texts);
 
     EndDrawing();
 
     // cleanup
   }
 
+  for (auto &t : texts) UnloadTexture(t);
   CloseWindow();
   return 0;
 }
